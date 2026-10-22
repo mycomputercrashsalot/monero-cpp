@@ -311,6 +311,7 @@ namespace monero {
 
   struct monero_login_response {
     boost::optional<uint64_t> m_start_height;
+    boost::optional<uint32_t> m_lookahead; // sent by monero-lws; start_height is not
     boost::optional<bool> m_new_address;
     boost::optional<bool> m_generated_locally;
 

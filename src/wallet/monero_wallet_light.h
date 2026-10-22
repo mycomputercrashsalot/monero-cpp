@@ -137,6 +137,13 @@ namespace monero {
     std::shared_ptr<monero_rpc_connection> get_rpc_connection() const;
 
     /**
+     * Light wallets sync from a light wallet server (monero-lws), never from a daemon, so
+     * setting a daemon connection is unsupported.
+     */
+    void set_daemon_connection(const std::string& uri, const std::string& username = "", const std::string& password = "", const std::string& proxy_uri = "", const boost::optional<bool>& is_trusted = boost::none) override;
+    void set_daemon_connection(const std::shared_ptr<monero_rpc_connection>& connection, const boost::optional<bool>& is_trusted = boost::none) override;
+
+    /**
      * Supported wallet methods.
      */
     bool is_connected_to_daemon() const override;
@@ -165,6 +172,14 @@ namespace monero {
     uint64_t get_unlocked_balance() const override;
     uint64_t get_unlocked_balance(uint32_t account_idx) const override;
     uint64_t get_unlocked_balance(uint32_t account_idx, uint32_t subaddress_idx) const override;
+    /**
+     * Get the number of candidate spends the last sync could not verify, which is greater than
+     * zero only for view-only wallets without imported key images; when non-zero, total sent
+     * and balances are the server's unrefined conservative values.
+     *
+     * @return the number of unrefined spends from the last sync
+     */
+    uint64_t get_unrefined_spend_count() const;
     std::vector<monero_account> get_accounts(bool include_subaddresses, const std::string& tag) const override;
     monero_account get_account(const uint32_t account_idx, bool include_subaddresses) const override;
     monero_account create_account(const std::string& label = "") override;
@@ -244,6 +259,7 @@ namespace monero {
     monero_sync_result sync_aux(boost::optional<uint64_t> start_height = boost::none, bool from_background_loop = false);       // internal function to immediately block, sync, and report progress
     std::atomic<uint64_t> m_last_synced_total_received{0};
     std::atomic<uint64_t> m_last_synced_total_sent{0};
+    std::atomic<uint64_t> m_unrefined_spend_count{0};  // candidate spends the last sync could not verify (view-only without cached key images)
     void invalidate_sync();
 
     // wallet data
@@ -252,6 +268,7 @@ namespace monero {
 
     bool is_output_spent(const std::shared_ptr<monero_output_light> &output, const std::unordered_set<std::string>& pool_key_images) const;
     bool is_spend_real(const std::shared_ptr<monero_spend>& spend) const;
+    bool is_spend_verifiable(const std::shared_ptr<monero_spend>& spend) const;  // whether the wallet can verify a candidate spend is real (spend key present or key image cached)
     void process_txs(monero_get_address_txs_response& address_txs, const monero_get_unspent_outs_response& unspent_outs);
     uint64_t process_outputs(std::vector<std::shared_ptr<monero_output_light>>& outputs, uint64_t total_amount);
     void process_subaddresses();

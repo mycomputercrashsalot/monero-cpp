@@ -172,7 +172,7 @@ namespace monero {
         for (boost::property_tree::ptree::const_iterator it2 = it->second.begin(); it2 != it->second.end(); ++it2) {
           std::shared_ptr<monero_spend> out = std::make_shared<monero_spend>();
           monero_spend::from_property_tree(it2->second, out);
-          if (out->m_sender == nullptr || out->m_amount == boost::none || out->m_tx_pub_key == boost::none || out->m_out_index == boost::none) {
+          if (out->m_amount == boost::none || out->m_tx_pub_key == boost::none || out->m_out_index == boost::none) {
             throw std::runtime_error("Light wallet server response is missing required spend fields");
           }
           transaction->m_spent_outputs.push_back(out);
@@ -528,8 +528,7 @@ namespace monero {
       else if (key == std::string("spent_outputs")) {
         for (boost::property_tree::ptree::const_iterator it2 = it->second.begin(); it2 != it->second.end(); ++it2) {
           std::shared_ptr<monero_spend> spent_output = std::make_shared<monero_spend>();
-          monero_spend::from_property_tree(it2->second, spent_output);
-          if (spent_output->m_sender == nullptr) throw std::runtime_error("Light wallet server response is missing spend sender info");
+          monero_spend::from_property_tree(it2->second, spent_output); // sender is optional: a monero-lws-specific field omitted by spec-conformant servers
           response->m_spent_outputs.push_back(spent_output);
         }
       }
@@ -627,6 +626,7 @@ namespace monero {
       if (key == std::string("new_address")) response->m_new_address = it->second.get_value<bool>();
       else if (key == std::string("generated_locally")) response->m_generated_locally = it->second.get_value<bool>();
       else if (key == std::string("start_height")) response->m_start_height = it->second.get_value<uint64_t>();
+      else if (key == std::string("lookahead")) response->m_lookahead = it->second.get_value<uint32_t>();
     }
   }
 
