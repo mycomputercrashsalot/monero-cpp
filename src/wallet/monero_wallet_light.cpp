@@ -1516,6 +1516,14 @@ namespace monero {
     return m_rpc;
   }
 
+  void monero_wallet_light::set_daemon_connection(const std::string& uri, const std::string& username, const std::string& password, const std::string& proxy_uri, const boost::optional<bool>& is_trusted) {
+    throw std::runtime_error("Cannot set daemon connection for light wallet: light wallets use a light wallet server (monero-lws), not a daemon");
+  }
+
+  void monero_wallet_light::set_daemon_connection(const std::shared_ptr<monero_rpc_connection>& connection, const boost::optional<bool>& is_trusted) {
+    throw std::runtime_error("Cannot set daemon connection for light wallet: light wallets use a light wallet server (monero-lws), not a daemon");
+  }
+
   bool monero_wallet_light::is_connected_to_daemon() const {
     assert_not_closed();
     m_is_connected = m_client->is_connected();
@@ -3355,8 +3363,10 @@ namespace monero {
   cryptonote::subaddress_index get_transaction_sender(const std::shared_ptr<monero_tx_light>& tx) {
     cryptonote::subaddress_index si = {0,0};
     for (const auto &output : tx->m_spent_outputs) {
-      si.major = output->m_sender->m_maj_i;
-      si.minor = output->m_sender->m_min_i;
+      if (output->m_sender != nullptr) { // sender is a monero-lws-specific field which spec-conformant servers omit
+        si.major = output->m_sender->m_maj_i;
+        si.minor = output->m_sender->m_min_i;
+      }
       break;
     }
     return si;
@@ -3532,8 +3542,8 @@ namespace monero {
         }
 
         for (const auto& spent_output : tx->m_spent_outputs) {
-          uint32_t account_idx = spent_output->m_sender->m_maj_i;
-          uint32_t subaddress_idx = spent_output->m_sender->m_min_i;
+          uint32_t account_idx = spent_output->m_sender == nullptr ? 0 : spent_output->m_sender->m_maj_i; // sender is monero-lws-specific
+          uint32_t subaddress_idx = spent_output->m_sender == nullptr ? 0 : spent_output->m_sender->m_min_i;
           uint64_t out_amount = spent_output->m_amount.get();
 
           if (account_idx == sender.major && std::find_if(outgoing_transfer->m_subaddress_indices.begin(), outgoing_transfer->m_subaddress_indices.end(), [subaddress_idx](const uint32_t &idx) { return subaddress_idx == idx; }) == outgoing_transfer->m_subaddress_indices.end()) {
@@ -3743,7 +3753,25 @@ namespace monero {
   bool monero_wallet_light::is_spend_real(const std::shared_ptr<monero_spend>& spend) const {
     if (spend->m_key_image == boost::none) return false;
     std::string key_image = spend->m_key_image.get();
-    return is_key_image_ours(key_image, spend->m_tx_pub_key.get(), spend->m_out_index.get(), spend->m_sender->m_maj_i, spend->m_sender->m_min_i, boost::none);
+    // sender is a monero-lws-specific field which spec-conformant servers omit; default to the primary address
+    uint32_t account_idx = spend->m_sender == nullptr ? 0 : spend->m_sender->m_maj_i;
+    uint32_t subaddress_idx = spend->m_sender == nullptr ? 0 : spend->m_sender->m_min_i;
+    return is_key_image_ours(key_image, spend->m_tx_pub_key.get(), spend->m_out_index.get(), account_idx, subaddress_idx, boost::none);
+  }
+
+  bool monero_wallet_light::is_spend_verifiable(const std::shared_ptr<monero_spend>& spend) const {
+    // a full wallet can always derive key images to verify candidate spends; a view-only wallet
+    // cannot (is_key_image_ours returns false on the uncached path) so a candidate spend is only
+    // verifiable when its key image was previously cached, e.g. by import_key_images
+    if (!is_view_only()) return true;
+    uint32_t account_idx = spend->m_sender == nullptr ? 0 : spend->m_sender->m_maj_i;
+    uint32_t subaddress_idx = spend->m_sender == nullptr ? 0 : spend->m_sender->m_min_i;
+    return m_key_image_cache->get(spend->m_tx_pub_key.get(), spend->m_out_index.get(), account_idx, subaddress_idx) != nullptr;
+  }
+
+  uint64_t monero_wallet_light::get_unrefined_spend_count() const {
+    assert_not_closed();
+    return m_unrefined_spend_count;
   }
 
   // TODO monero_wallet_full::run_sync_loop()
@@ -3889,6 +3917,7 @@ namespace monero {
   }
 
   void monero_wallet_light::process_txs(monero_get_address_txs_response& address_txs, const monero_get_unspent_outs_response& unspent_outs) {
+    m_unrefined_spend_count = 0;
     std::unordered_set<std::string> owned_output_tx_hashes;
     for (const auto& out : unspent_outs.m_outputs) {
       if (out->m_tx_hash != boost::none) owned_output_tx_hashes.insert(out->m_tx_hash.get());
@@ -3904,7 +3933,11 @@ namespace monero {
       size_t out_idx = 0;
 
       for (auto& spend : tx->m_spent_outputs) {
-        if (!is_spend_real(spend)) {
+        if (!is_spend_verifiable(spend)) {
+          // view-only wallet without a cached key image cannot disprove the candidate spend:
+          // keep the server's conservative amount so spent funds are not shown as available
+          m_unrefined_spend_count++;
+        } else if (!is_spend_real(spend)) {
           uint64_t spend_amount = spend->m_amount.get();
           if (spend_amount > tx_total_sent) throw std::runtime_error("tx total sent is negative: " + tx->m_hash.get());
           tx_total_sent -= spend_amount;
