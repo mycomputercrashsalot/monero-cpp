@@ -620,13 +620,25 @@ namespace monero {
 
   // --------------------------- MONERO LOGIN RESPONSE ---------------------------
 
+  void monero_lookahead::from_property_tree(const boost::property_tree::ptree& node, const std::shared_ptr<monero_lookahead>& lookahead) {
+    for (boost::property_tree::ptree::const_iterator it = node.begin(); it != node.end(); ++it) {
+      std::string key = it->first;
+      if (key == std::string("maj_i")) lookahead->m_major_index = it->second.get_value<uint32_t>();
+      else if (key == std::string("min_i")) lookahead->m_minor_index = it->second.get_value<uint32_t>();
+    }
+  }
+
   void monero_login_response::from_property_tree(const boost::property_tree::ptree& node, const std::shared_ptr<monero_login_response>& response) {
     for (boost::property_tree::ptree::const_iterator it = node.begin(); it != node.end(); ++it) {
       std::string key = it->first;
       if (key == std::string("new_address")) response->m_new_address = it->second.get_value<bool>();
       else if (key == std::string("generated_locally")) response->m_generated_locally = it->second.get_value<bool>();
       else if (key == std::string("start_height")) response->m_start_height = it->second.get_value<uint64_t>();
-      else if (key == std::string("lookahead")) response->m_lookahead = it->second.get_value<uint32_t>();
+      else if (key == std::string("lookahead")) {
+        std::shared_ptr<monero_lookahead> lookahead = std::make_shared<monero_lookahead>();
+        monero_lookahead::from_property_tree(it->second, lookahead);
+        response->m_lookahead = lookahead;
+      }
     }
   }
 
