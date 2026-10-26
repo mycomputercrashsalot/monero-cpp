@@ -309,9 +309,18 @@ namespace monero {
     static void from_property_tree(const boost::property_tree::ptree& node, const std::shared_ptr<monero_import_wallet_response>& response);
   };
 
+  // the lookahead of the account of a light wallet server: the last account index and the last subaddress index of
+  // account 0 that it scans, as {"maj_i":uint32,"min_i":uint32}
+  struct monero_lookahead {
+    boost::optional<uint32_t> m_major_index;
+    boost::optional<uint32_t> m_minor_index;
+
+    static void from_property_tree(const boost::property_tree::ptree& node, const std::shared_ptr<monero_lookahead>& lookahead);
+  };
+
   struct monero_login_response {
     boost::optional<uint64_t> m_start_height;
-    boost::optional<uint32_t> m_lookahead; // sent by monero-lws; start_height is not
+    std::shared_ptr<monero_lookahead> m_lookahead; // sent by monero-lws; start_height is not
     boost::optional<bool> m_new_address;
     boost::optional<bool> m_generated_locally;
 
