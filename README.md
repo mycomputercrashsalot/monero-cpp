@@ -1,6 +1,6 @@
 # Monero C++ Library
 
-A C++ library for creating Monero applications using RPC or native bindings to [monero v0.18.5.3 'Fluorine Fermi'](https://github.com/monero-project/monero/tree/v0.18.5.3).
+A C++ library for creating Monero applications using RPC or native bindings to [monero v0.18.5.4 'Fluorine Fermi'](https://github.com/monero-project/monero/tree/v0.18.5.4).
 
 * Supports fully client-side wallets by wrapping [wallet2.h](https://github.com/monero-project/monero/blob/master/src/wallet/wallet2.h).
 * Supports wallet and daemon RPC clients.
@@ -170,10 +170,14 @@ For example, [monero-java](https://github.com/woodser/monero-java) compiles this
     For 64-bit:
 
      ```
-     pacman -S mingw-w64-x86_64-toolchain mingw-w64-x86_64-cmake mingw-w64-x86_64-openssl mingw-w64-x86_64-zeromq mingw-w64-x86_64-libsodium mingw-w64-x86_64-hidapi mingw-w64-x86_64-unbound mingw-w64-x86_64-protobuf mingw-w64-x86_64-libusb mingw-w64-x86_64-ntldd git make gettext base-devel wget
-     wget https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-icu-75.1-2-any.pkg.tar.zst
-     pacman -U mingw-w64-x86_64-icu-75.1-2-any.pkg.tar.zst
+     pacman -S mingw-w64-x86_64-toolchain mingw-w64-x86_64-cmake mingw-w64-x86_64-openssl mingw-w64-x86_64-zeromq mingw-w64-x86_64-libsodium mingw-w64-x86_64-unbound mingw-w64-x86_64-protobuf mingw-w64-x86_64-expat mingw-w64-x86_64-icu mingw-w64-x86_64-ntldd git make gettext base-devel wget
+     # removed from the msys2 mingw64 repo; install the archived packages
+     wget https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-hidapi-0.15.0-2-any.pkg.tar.zst https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-libusb-1.0.30-1-any.pkg.tar.zst
+     echo "89fb61549a437d65076a092a367fcb264fc7045ee9ebef48cd81f5a76a5588f8  mingw-w64-x86_64-hidapi-0.15.0-2-any.pkg.tar.zst" | sha256sum -c
+     echo "124edc26b009678a4c5e759481a364abf63ed7f2f49a53092e8bd0a47c0c0740  mingw-w64-x86_64-libusb-1.0.30-1-any.pkg.tar.zst" | sha256sum -c
+     pacman -U mingw-w64-x86_64-hidapi-0.15.0-2-any.pkg.tar.zst mingw-w64-x86_64-libusb-1.0.30-1-any.pkg.tar.zst
      wget https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-boost-1.87.0-3-any.pkg.tar.zst
+     echo "241919a5885a9270d0e0937e71cf5e146c2a8cabecc2714f09248350181cb1b6  mingw-w64-x86_64-boost-1.87.0-3-any.pkg.tar.zst" | sha256sum -c
      pacman -U mingw-w64-x86_64-boost-1.87.0-3-any.pkg.tar.zst
      ```
 
@@ -190,6 +194,12 @@ For example, [monero-java](https://github.com/woodser/monero-java) compiles this
     
     For 32-bit: `make release-static-win32`
 8. Link to this library's source files in your application, or build monero-cpp to a shared library (libmonero-cpp.dll) in ./build: `./bin/build_libmonero_cpp.sh`
+
+### Android
+
+The build workflow produces shared and static libraries for `arm64-v8a` and `x86_64` (Android 9/API 28 or later), without hardware wallet support.
+
+For HTTPS daemon connections, set `SSL_CERT_FILE` to the absolute path of a trusted PEM CA bundle in app-private storage before creating wallet or RPC clients. Bundled OpenSSL does not use Android's Java trust store.
 
 ## Running sample code and tests
 
