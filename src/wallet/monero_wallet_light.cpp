@@ -1884,6 +1884,7 @@ namespace monero {
     {
       sync_op_lock op_lock(*this); // do not refresh while relaying txs
       try {
+        std::vector<std::string> failed;
         for (const auto& tx_metadata : tx_metadatas) {
           // parse tx metadata hex
           cryptonote::blobdata blob;
@@ -1910,11 +1911,19 @@ namespace monero {
 
           // commit tx
           std::string full_hex = epee::string_tools::buff_to_hex_nodelimer(tx_to_blob(ptx.tx));
+          // the transactions relay one by one, so a failure after the first leaves them on the network that no
+          // returned list names: a submit that fails is collected per transaction and the set is tried to its
+          // end, and the report names the hashes that went out, so a caller that rebuilds knows what already pays
+          std::string failure;
           std::shared_ptr<monero_submit_raw_tx_response> submit_res;
           try { submit_res = m_client->submit_raw_tx(full_hex); }
-          catch (const std::exception& e) { throw std::runtime_error(std::string("Failed to commit tx: ") + e.what()); }
-          if (submit_res == nullptr || submit_res->m_status == boost::none || submit_res->m_status.get() != std::string("OK")) {
-            throw std::runtime_error("Failed to commit tx" + (submit_res != nullptr && submit_res->m_status != boost::none ? (": " + submit_res->m_status.get()) : std::string()));
+          catch (const std::exception& e) { failure = std::string("Failed to commit tx: ") + e.what(); }
+          if (failure.empty() && (submit_res == nullptr || submit_res->m_status == boost::none || submit_res->m_status.get() != std::string("OK"))) {
+            failure = "Failed to commit tx" + (submit_res != nullptr && submit_res->m_status != boost::none ? (": " + submit_res->m_status.get()) : std::string());
+          }
+          if (!failure.empty()) {
+            failed.push_back(failure);
+            continue;
           }
           if (ptx.tx_key != crypto::null_skey) {
             const crypto::hash txid = get_transaction_hash(ptx.tx);
@@ -1929,6 +1938,13 @@ namespace monero {
           // collect resulting hash
           std::string pending_tx_hash = epee::string_tools::pod_to_hex(cryptonote::get_transaction_hash(ptx.tx));
           tx_hashes.push_back(pending_tx_hash);
+        }
+        if (!failed.empty()) {
+          std::string relayed_list;
+          for (const auto& h : tx_hashes) relayed_list += (relayed_list.empty() ? "" : ", ") + h;
+          std::string failed_list;
+          for (const auto& f : failed) failed_list += (failed_list.empty() ? "" : "; ") + f;
+          throw std::runtime_error("failed to relay " + std::to_string(failed.size()) + " of " + std::to_string(tx_metadatas.size()) + " transactions" + (tx_hashes.empty() ? std::string() : "; already relayed: " + relayed_list) + "; " + failed_list);
         }
       } catch (...) {
         if (!tx_hashes.empty()) m_cache->calculate_balance();
@@ -2188,10 +2204,24 @@ namespace monero {
 
         hw::device& hwdev = m_account.get_device();
         try {
+          std::vector<std::string> refused;
           for (auto &ptx: signed_txs.ptx) {
             const std::string full_hex = epee::string_tools::buff_to_hex_nodelimer(cryptonote::tx_to_blob(ptx.tx));
-            const auto res = m_client->submit_raw_tx(full_hex);
-            if (res->m_status == boost::none || res->m_status.get() != std::string("OK")) throw std::runtime_error("Could not relay tx" + signed_tx_hex);
+            // a transport failure and a refusal lose the same thing: the transactions that went out before them.
+            // Both are collected per transaction, so the set is tried to its end whatever the server or the
+            // connection does, and the report names the hashes that went out and the ones that did not, so a
+            // caller that rebuilds knows what already pays
+            std::string failure;
+            try {
+              const auto res = m_client->submit_raw_tx(full_hex);
+              if (res->m_status == boost::none || res->m_status.get() != std::string("OK")) failure = res->m_status ? *res->m_status : std::string("no status");
+            } catch (const std::exception &e) { failure = e.what(); }
+            if (!failure.empty()) {
+              crypto::hash refused_hash;
+              refused_hash = cryptonote::get_transaction_hash(ptx.tx);
+              refused.push_back(epee::string_tools::pod_to_hex(refused_hash) + ": " + failure);
+              continue;
+            }
             crypto::hash txid;
             txid = cryptonote::get_transaction_hash(ptx.tx);
             std::string pending_tx_hash = epee::string_tools::pod_to_hex(txid);
@@ -2256,6 +2286,13 @@ namespace monero {
                 }
               }
             }
+          }
+          if (!refused.empty()) {
+            std::string relayed_list;
+            for (const auto& h : tx_hashes) relayed_list += (relayed_list.empty() ? "" : ", ") + h;
+            std::string refused_list;
+            for (const auto& r : refused) refused_list += (refused_list.empty() ? "" : "; ") + r;
+            throw std::runtime_error("the server did not relay " + std::to_string(refused.size()) + " of " + std::to_string(signed_txs.ptx.size()) + " transactions" + (tx_hashes.empty() ? std::string() : "; already relayed: " + relayed_list) + "; not relayed: " + refused_list);
           }
         } catch (...) {
           if (key_images_changed) {
