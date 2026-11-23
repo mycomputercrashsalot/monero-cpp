@@ -264,6 +264,20 @@ namespace monero {
      */
     monero_rpc_response send_binary_request(const monero_rpc_request &request, const boost::optional<uint32_t>& timeout_ms = boost::none) const;
 
+    /**
+     * POST a raw request body to the RPC API and return the response body without deserializing it.
+     *
+     * This is the raw surface under the send request methods, for bindings that parse the response
+     * with their own json instead of the property tree. The http client, the authentication, the
+     * timeouts and the http errors stay in one place.
+     *
+     * @param uri is the url path of the request to invoke
+     * @param body is the request body to send
+     * @param timeout_ms is the request timeout in milliseconds
+     * @return the raw response body
+     */
+    std::string invoke_post(const boost::string_ref uri, const std::string& body, const boost::optional<uint32_t>& timeout_ms = boost::none) const;
+
     rapidjson::Value to_rapidjson_val(rapidjson::Document::AllocatorType& allocator) const override;
 
   protected:
@@ -276,8 +290,19 @@ namespace monero {
     mutable std::tuple<std::string, std::string, std::string, std::string, bool> m_applied{"", "", "", "", true};
 
     void ensure_configured() const;
-    std::string invoke_post(const boost::string_ref uri, const std::string& body, const boost::optional<uint32_t>& timeout_ms = boost::none) const;
     void send_rpc_request(const boost::string_ref uri, const monero_rpc_request& request, monero_rpc_response& response, const boost::optional<uint32_t>& timeout_ms = boost::none, bool binary = false) const;
   };
+
+  /**
+   * Check a raw JSON-RPC response body for an error and raise monero_rpc_error if it has one.
+   *
+   * This is the error check of the send request methods for bindings that parse the response with
+   * their own json, so the error shape stays in one place.
+   *
+   * @param body is the raw response body to check
+   * @param uri is the url path of the request that the body answers
+   * @param method is the method of the request that the body answers
+   */
+  void raise_rpc_error(const std::string& body, const std::string& uri, const std::string& method);
 
 }

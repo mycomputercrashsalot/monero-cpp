@@ -398,6 +398,17 @@ namespace monero {
     return pri->m_body;
   }
 
+  void raise_rpc_error(const std::string& body, const std::string& uri, const std::string& method) {
+
+    // parse json to property node
+    boost::property_tree::ptree node;
+    gen_utils::deserialize(body, node);
+
+    // raise if the response is a JSON-RPC error
+    boost::optional<boost::property_tree::ptree&> error_node = node.get_child_optional("error");
+    if (error_node != boost::none) raise_rpc_error(error_node.get(), uri, method);
+  }
+
   void deserialize_rpc_response(const std::string& json, monero_rpc_response& response, const boost::string_ref uri, const std::string& method) {
 
     // parse json to property node
