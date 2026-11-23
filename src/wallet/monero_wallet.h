@@ -1027,7 +1027,14 @@ namespace monero {
      * @return the message signature result
      */
     virtual monero_message_signature_result verify_message(const std::string& msg, const std::string& address, const std::string& signature) const {
-      throw std::runtime_error("verify_message() not supported");
+      // the base wallet verifies no signature, so none is good on it, the way a wallet answers a
+      // bad result for an address it cannot parse
+      monero_message_signature_result result;
+      result.m_is_good = false;
+      result.m_is_old = false;
+      result.m_version = 0;
+      result.m_signature_type = monero_message_signature_type::SIGN_WITH_SPEND_KEY;
+      return result;
     }
 
     /**

@@ -2961,7 +2961,14 @@ namespace monero {
         return addresses[0];
       }))
     {
-      throw std::runtime_error(err);
+      // the wallet cannot parse the address, which cannot have signed the message: a bad result
+      // instead of a thrown error, the way the wallet rpc answers the error code of a wrong address
+      monero_message_signature_result result;
+      result.m_is_good = false;
+      result.m_is_old = false;
+      result.m_version = 0;
+      result.m_signature_type = monero_message_signature_type::SIGN_WITH_SPEND_KEY;
+      return result;
     }
 
     // verify message
